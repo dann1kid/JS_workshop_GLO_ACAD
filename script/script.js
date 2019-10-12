@@ -87,7 +87,7 @@ document.addEventListener('DOMContentLoaded',  () => {
 
         sidebarMenu.addEventListener('click', e=> {
             let target = e.target
-            target = target.closest('a[href="#"]')
+            target = target.closest('a[href*=""]')
 
             if (target) {
                 const parentTarget = target.parentElement
@@ -217,19 +217,70 @@ document.addEventListener('DOMContentLoaded',  () => {
                     const trends = document.getElementById('yt_trend')
                     const like = document.getElementById('like')
                     const main = document.getElementById('yt_main')
+                    const subscriptions = document.getElementById('subscriptions')
+                    const searchForm = document.querySelector('.search-form')
+                    const next = document.getElementById('next_result')
                     
 
                     const request = options => gapi.client.youtube[options.method]
                     .list(options)
                     .then(response => response.result.items)
-                    .then(render)
-                    .then(youtuber)
+                    .then(data => options.method === 'subscriptions' ? renderSub(data) : render(data))
                     .catch(error => console.error(error))
                     
                     
+                    const renderSub = data => {
+                        
+                        console.log(data)
+
+                        const ytWrapper = document.getElementById('yt-wrapper')
+                        ytWrapper.textContent = ''
+                        data.forEach (item => {
+                            console.log('sub')
+                            try {
+                                const {snippet:
+                                    {resourceId:
+                                        {channelId}, 
+                                        description, 
+                                        title, 
+                                        thumbnails:
+                                            {high:
+                                                {url}
+                                            }
+                                        }
+                                    } = item
+
+                                ytWrapper.innerHTML += `
+                                <div class="yt" data-youtuber="${channelId}">
+                                    <div class="yt-thumbnail" style="--aspect-ratio:16/9;">
+                                        <img src="${url}" alt="thumbnail" class="yt-thumbnail__img">
+                                    </div>
+                                    <div class="yt-title">${title}</div>
+                                    <div class="yt-channel">${description}</div>
+                                </div>
+                                `
+                            }
+                            catch (error) {
+                                console.error(error)
+                            }
+                        })
+                        ytWrapper.querySelectorAll('.yt').forEach( item => {
+                            item.addEventListener('click', () => {
+                                request({
+                                    method: 'search', 
+                                    part: 'snippet',
+                                    channelId: item.dataset.youtuber, 
+                                    order: 'date',
+                                    maxResults: 12,
+                                })
+                            })
+                        })
+                    }   
+
+
                     const render = data => {
                         
-                        console.log(data);
+                        console.log(data)
 
                         const ytWrapper = document.getElementById('yt-wrapper')
                         ytWrapper.textContent = ''
@@ -237,14 +288,22 @@ document.addEventListener('DOMContentLoaded',  () => {
                             try {
                                 const {
                                     id, 
-                                    id:{videoId}, 
+                                    id:{
+                                        videoId
+                                    }, 
                                     snippet:{
                                         channelTitle, 
                                         title,
                                         resourceId:{
                                             videoId:likedVideoId
                                             } = {}, 
-                                        thumbnails:{high:{url}}}} = item
+                                        thumbnails:{
+                                            high:{
+                                                url
+                                            }
+                                        }
+                                    }
+                                } = item
 
                                 ytWrapper.innerHTML += `
                                 <div class="yt" data-youtuber="${likedVideoId || videoId || id}">
@@ -260,15 +319,21 @@ document.addEventListener('DOMContentLoaded',  () => {
                                 console.error(error)
                             }
                         })
-                    }   
+                        youtuber()
+                    }  
+
+                        let last_request =''
+
+
                         gloTube.addEventListener('click', () =>{
                             request({
                                 method: 'search', 
                                 part: 'snippet',
                                 channelId: 'UCVswRUcKC-M35RzgPRv8qUg', 
                                 order: 'date',
-                                maxResults: 6,
+                                maxResults: 12,
                             })
+                        last_request = 'gloTube'    
                         } )
 
                         trends.addEventListener('click', () =>{
@@ -276,9 +341,10 @@ document.addEventListener('DOMContentLoaded',  () => {
                                 method:'videos',
                                 part: 'snippet',
                                 chart: 'mostPopular',
-                                maxResults: 6,
+                                maxResults: 12,
                                 regionCode: 'RU',
-                            })
+                                })
+                            last_request = 'trends'
                         })
 
                         like.addEventListener('click', () =>{
@@ -286,21 +352,65 @@ document.addEventListener('DOMContentLoaded',  () => {
                                 method:'playlistItems',
                                 part: 'snippet',
                                 playlistId: 'LLFB3iUR65xretqvwZOTPL7Q',
-                                maxResults: 6,
-                            })
+                                maxResults: 12,
+                                })
+                            last_request = like
                         })
 
-                        main.addEventListener('click', () =>{
+                        main.addEventListener('click', (event) =>{
+                            event.preventDefault()
                             request({
                                 method:'playlistItems',
                                 part: 'snippet',
                                 playlistId: 'PLte2HHUYysP9gUZycxG1gq2Z5IoIcHVwe',
-                                maxResults: 6,
-                            })
+                                maxResults: 12,
+                                })
+                            last_request = main
                         })
-                    }
-                    
 
+                        subscriptions.addEventListener('click', () =>{
+                            request({
+                                method:'subscriptions',
+                                part:'snippet',
+                                mine:'true',
+                                maxResults: 12,
+                                })
+                            last_request = main
+                        })
+
+                        searchForm.addEventListener('submit', event => {
+                            event.preventDefault()
+                            let valueInput = searchForm.elements[0].value
+                            if (!valueInput) {searchForm.style.border= '1px solid red' 
+                                return
+                                }
+                            searchForm.style.border= ''
+                            request({
+                                method:'search',
+                                part:'snippet',
+                                order:'relevance',
+                                maxResults: 12,
+                                q: valueInput,
+                            })
+                            searchForm.elements[0].value = ''
+                        })
+
+                        next.addEventListener('click', () =>{
+                            // Не знаю как обратится к триггеру с аргументом
+                            if (last_request === gloTube) {
+                                addResult = 12
+                                // maxResults = null
+                                request({
+                                    method: 'search', 
+                                    part: 'snippet',
+                                    channelId: 'UCVswRUcKC-M35RzgPRv8qUg', 
+                                    order: 'date',
+                                    maxResults: maxResults + addResult,
+                                })
+                            }
+                        })
+
+                    }
                 }
 
 
